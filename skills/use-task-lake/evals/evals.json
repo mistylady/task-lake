@@ -1,0 +1,45 @@
+{
+  "skill_name": "use-task-lake",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "eval-1-add-due-label",
+      "prompt": "見積書のレビューってタスク、明日締切で積んでおいて。redmine:5678の案件のやつね",
+      "expected_output": "due=2026-07-17（今日2026-07-16の翌日）・ラベルredmine:5678付きでタスクが1件登録される",
+      "files": [],
+      "assertions": [
+        "created task has due 2026-07-17 (tomorrow computed from today 2026-07-16)",
+        "created task has label redmine:5678",
+        "created task title contains 見積書",
+        "exactly one task exists in tasks.jsonl after the run",
+        "agent used --json flag on tlk commands (transcript)"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "eval-2-overdue-detection",
+      "prompt": "いま抱えてるタスクで期限切れてるのある?",
+      "expected_output": "週報を書く（due 2026-07-10）だけを期限切れとして報告する。データは変更しない",
+      "files": ["seeded tasks.jsonl: 週報を書く(due過去) / 資料レビュー(due未来) / 備品申請(dueなし)"],
+      "assertions": [
+        "answer identifies 週報を書く as overdue",
+        "answer does not report 資料レビュー or 備品申請 as overdue",
+        "tasks.jsonl is unchanged after the run (read-only)",
+        "agent used tlk list with --json (transcript)"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "eval-3-complete-by-title",
+      "prompt": "メールのタスク終わったから完了にしといて",
+      "expected_output": "list等でID特定→ tlk done 1 を実行。A社にメール返信がdoneになり、議事録作成はopenのまま",
+      "files": ["seeded tasks.jsonl: A社にメール返信(open) / 議事録作成(open)"],
+      "assertions": [
+        "task id 1 (A社にメール返信) has status done in tasks.jsonl",
+        "task id 2 (議事録作成) remains open",
+        "mutation command used numeric ID (e.g. done 1), never a title fragment (transcript)",
+        "agent identified the ID via list/show before mutating (transcript)"
+      ]
+    }
+  ]
+}
