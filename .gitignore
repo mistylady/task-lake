@@ -1,10 +1,10 @@
 .claude
+.idea
 .codex
 work-notes
 node_modules
 .DS_Store
 CLAUDE.md
-/.idea/materials/
 
 # ローカルデータ・環境変数
 .task-lake/
@@ -22,8 +22,3 @@ id_ed25519
 *.key
 *.p12
 *.pfx
-
-# IDE生成物（.idea/*.md の設計文書は追跡を維持する）
-.idea/workspace.xml
-.idea/*.iml
-.idea/shelf/
