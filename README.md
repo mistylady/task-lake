@@ -10,10 +10,16 @@ Task Lake を操作するのは、主に AI エージェント（Claude Code や
 
 ```sh
 bun install
-bun run tlk --help
+bun link          # tlk コマンドを ~/.bun/bin に登録する
 ```
 
-開発中は `bun run tlk <command>` で実行できます。`package.json` の `bin` は `tlk` を `src/index.ts` に割り当てているため、任意の Bun 対応の方法でリンクまたはパッケージ化することもできます。実行時依存はありません。
+`~/.bun/bin` が PATH に入っていない場合は追加してください（例: シェルの rc ファイルに `export PATH="$HOME/.bun/bin:$PATH"` を追記）。最後に動作確認します。
+
+```sh
+tlk --help
+```
+
+実行時依存はありません。リンクせずに使うときは `bun run --silent tlk <command>` でも同じ動きになります。`--silent` を付けない `bun run tlk` は bun 自身のログが stderr に混ざり、「エラー時は stderr に JSON 1件だけ」という保証が崩れるため、エージェントに使わせる場合は避けてください。
 
 データは既定で `~/.task-lake/` の下に保存されます。平常時にあるのは次の2ファイルです。
 
@@ -28,36 +34,36 @@ bun run tlk --help
 テストや一時利用では保存ディレクトリを変更できます。
 
 ```sh
-TASK_LAKE_HOME=/tmp/my-task-lake bun run tlk list --json
+TASK_LAKE_HOME=/tmp/my-task-lake tlk list --json
 ```
 
 ## 使い方
 
 ```sh
 # 登録
-bun run tlk add "A社へ返信する" --due 2026-07-20 -l rdm:1234
-bun run tlk add "ログを調べる" --note - < investigation.txt
+tlk add "A社へ返信する" --due 2026-07-20 -l rdm:1234
+tlk add "ログを調べる" --note - < investigation.txt
 
 # 一覧と詳細（通常のlistはopenのみ、期限順）
-bun run tlk list
-bun run tlk list -l rdm:1234 --json
-bun run tlk list --all --limit 100
-bun run tlk show 12
-bun run tlk show "A社へ"
+tlk list
+tlk list -l rdm:1234 --json
+tlk list --all --limit 100
+tlk show 12
+tlk show "A社へ"
 
 # ID完全一致で変更
-bun run tlk done 12 --note "対応済み"
-bun run tlk reopen 12
-bun run tlk edit 12 --title "A社へ再返信する" --clear-due
-bun run tlk edit 12 --add-label followup --remove-label rdm:1234
-bun run tlk edit 12 --set-labels followup,customer --note "確認待ち"
-bun run tlk rm 12
+tlk done 12 --note "対応済み"
+tlk reopen 12
+tlk edit 12 --title "A社へ再返信する" --clear-due
+tlk edit 12 --add-label followup --remove-label rdm:1234
+tlk edit 12 --set-labels followup,customer --note "確認待ち"
+tlk rm 12
 
 # CLIスキーマとデータ診断
-bun run tlk describe
-bun run tlk describe edit --json
-bun run tlk describe --all --json
-bun run tlk validate --json
+tlk describe
+tlk describe edit --json
+tlk describe --all --json
+tlk validate --json
 ```
 
 全コマンドが `--json` を受け付けます。変更系の成功結果は常に `{"changed": boolean, "task": Task | null}` の形です。`task` が `null` になるのは、存在しないIDへの `rm`（冪等なno-op）だけです。
