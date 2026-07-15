@@ -1,5 +1,29 @@
 .claude
-materials
 .codex
 work-notes
 node_modules
+.DS_Store
+CLAUDE.md
+/.idea/materials/
+
+# ローカルデータ・環境変数
+.task-lake/
+tasks.jsonl
+tasks.jsonl.*
+.tasks.jsonl.tmp-*
+.env
+.env.*
+!.env.example
+
+# 鍵類
+id_rsa
+id_ed25519
+*.pem
+*.key
+*.p12
+*.pfx
+
+# IDE生成物（.idea/*.md の設計文書は追跡を維持する）
+.idea/workspace.xml
+.idea/*.iml
+.idea/shelf/
