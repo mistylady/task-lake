@@ -23,12 +23,12 @@ TASK_LAKE_HOME=/tmp/my-task-lake bun run tlk list --json
 
 ```sh
 # 登録
-bun run tlk add "A社へ返信する" --due 2026-07-20 -l redmine:1234
+bun run tlk add "A社へ返信する" --due 2026-07-20 -l rdm:1234
 bun run tlk add "ログを調べる" --note - < investigation.txt
 
 # 一覧と詳細（通常のlistはopenのみ、期限順）
 bun run tlk list
-bun run tlk list -l redmine:1234 --json
+bun run tlk list -l rdm:1234 --json
 bun run tlk list --all --limit 100
 bun run tlk show 12
 bun run tlk show "A社へ"
@@ -37,7 +37,7 @@ bun run tlk show "A社へ"
 bun run tlk done 12 --note "対応済み"
 bun run tlk reopen 12
 bun run tlk edit 12 --title "A社へ再返信する" --clear-due
-bun run tlk edit 12 --add-label followup --remove-label redmine:1234
+bun run tlk edit 12 --add-label followup --remove-label rdm:1234
 bun run tlk edit 12 --set-labels followup,customer --note "確認待ち"
 bun run tlk rm 12
 

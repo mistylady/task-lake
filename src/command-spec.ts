@@ -124,7 +124,7 @@ const exampleTask = {
   title: "設定値を確認する",
   status: "open",
   due: "2026-07-20",
-  labels: ["redmine:1234"],
+  labels: ["rdm:1234"],
   created: "2026-07-15T21:30:00+09:00",
 };
 
@@ -169,7 +169,7 @@ export const COMMAND_SPECS = [
       "optional値を指定しない場合、そのキーは保存しない",
     ],
     example: {
-      input: 'tlk add "設定値を確認する" --due 2026-07-20 -l redmine:1234 --json',
+      input: 'tlk add "設定値を確認する" --due 2026-07-20 -l rdm:1234 --json',
       output: { changed: true, task: exampleTask },
     },
   },
@@ -283,7 +283,7 @@ export const COMMAND_SPECS = [
           id: "12",
           title: "設定値を確認する",
           status: "open",
-          labels: ["redmine:1234", "checked"],
+          labels: ["rdm:1234", "checked"],
           created: "2026-07-15T21:30:00+09:00",
         },
       },
