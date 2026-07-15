@@ -43,7 +43,7 @@ export type Result<T, E = TaskLakeError> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: E };
 
-export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
+export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 
 export const err = <E = TaskLakeError>(error: E): Result<never, E> => ({
   ok: false,

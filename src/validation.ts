@@ -234,13 +234,6 @@ const appendDuplicateIssues = (
   }
 };
 
-export const validateTask = (value: unknown, line = 1): Result<Task> => {
-  const analysis = analyzeTask(value, line);
-  return analysis.task === undefined
-    ? err(validationIssuesToError(analysis.issues))
-    : ok(analysis.task);
-};
-
 export const validateTasks = (values: readonly unknown[]): Result<readonly Task[]> => {
   const tasksWithLines: { readonly task: Task; readonly line: number }[] = [];
   const idsWithLines: { readonly id: string; readonly line: number }[] = [];

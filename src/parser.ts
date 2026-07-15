@@ -5,15 +5,11 @@ import {
   GLOBAL_OPTIONS,
   type OptionSpec,
   type PositionalSpec,
-  commandUsage,
   getCommandSpec,
   getEffectiveOptions,
   isCommandName,
 } from "./command-spec";
-
-export type Result<T, E> =
-  | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; error: E }>;
+import { err as failure, ok as success, type Result } from "./types";
 
 export type UsageError = Readonly<{
   code: "usage";
@@ -52,9 +48,6 @@ type LocatedCommand = Readonly<{
   commandIndex: number;
   prefixOptions: Readonly<Record<string, ParsedOptionValue>>;
 }>;
-
-const success = <T>(value: T): Result<T, never> => ({ ok: true, value });
-const failure = <E>(error: E): Result<never, E> => ({ ok: false, error });
 
 const usageError = (
   message: string,
@@ -482,16 +475,4 @@ export const getRepeatedOption = (
 ): readonly string[] => {
   const value = invocation.options[name];
   return Array.isArray(value) ? value : [];
-};
-
-export const usageForError = (
-  invocationOrCommand: ParsedCommandInvocation | CommandName,
-  programName = "tlk",
-): string => {
-  const command =
-    typeof invocationOrCommand === "string"
-      ? invocationOrCommand
-      : invocationOrCommand.command;
-  const spec = getCommandSpec(command);
-  return spec === undefined ? `${programName} <command> [options]` : commandUsage(spec, programName);
 };

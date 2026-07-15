@@ -42,20 +42,6 @@ const jsonl = (...tasks: readonly Task[]): string =>
     ? ""
     : `${tasks.map((value) => JSON.stringify(value)).join("\n")}\n`;
 
-const expectMissing = async (path: string): Promise<void> => {
-  try {
-    await access(path);
-    throw new Error(`expected ${path} not to exist`);
-  } catch (cause) {
-    if (
-      cause instanceof Error &&
-      cause.message === `expected ${path} not to exist`
-    ) {
-      throw cause;
-    }
-  }
-};
-
 afterEach(async () => {
   const directories = temporaryDirectories.splice(0);
   await Promise.all(
@@ -99,7 +85,7 @@ describe("read-only storage", () => {
     const result = await loadTasks({ home });
 
     expect(result).toEqual({ ok: true, value: [] });
-    await expectMissing(home);
+    await expect(access(home)).rejects.toThrow();
   });
 
   test("unknown fields survive parsing and optional null is canonicalized", async () => {
@@ -192,8 +178,8 @@ describe("write transaction", () => {
       expect("note" in (stored.value[0] ?? {})).toBe(false);
     }
 
-    await expectMissing(paths.lockFile);
-    await expectMissing(paths.backupTempFile);
+    await expect(access(paths.lockFile)).rejects.toThrow();
+    await expect(access(paths.backupTempFile)).rejects.toThrow();
     expect((await readdir(home)).some((name) => name.includes(".tmp-"))).toBe(
       false,
     );
@@ -285,8 +271,8 @@ describe("write transaction", () => {
       expect(result.error.line).toBe(1);
     }
     expect(await readFile(paths.dataFile, "utf8")).toBe(corrupt);
-    await expectMissing(paths.backupFile);
-    await expectMissing(paths.lockFile);
+    await expect(access(paths.backupFile)).rejects.toThrow();
+    await expect(access(paths.lockFile)).rejects.toThrow();
   });
 
   test("a transform error performs no write and releases the lock", async () => {
@@ -309,7 +295,7 @@ describe("write transaction", () => {
 
     expect(result.ok).toBe(false);
     expect(await readFile(paths.dataFile, "utf8")).toBe(oldRaw);
-    await expectMissing(paths.backupFile);
-    await expectMissing(paths.lockFile);
+    await expect(access(paths.backupFile)).rejects.toThrow();
+    await expect(access(paths.lockFile)).rejects.toThrow();
   });
 });

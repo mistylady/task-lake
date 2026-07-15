@@ -10,11 +10,13 @@ import type { FileHandle } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import type {
-  Result,
-  Task,
-  TaskLakeError,
-  ValidationReport,
+import {
+  err as failure,
+  ok as success,
+  type Result,
+  type Task,
+  type TaskLakeError,
+  type ValidationReport,
 } from "./types";
 import {
   diagnoseJsonl,
@@ -38,7 +40,6 @@ export interface StorageOptions {
   /** Explicit home is primarily useful to keep tests isolated. */
   readonly home?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
-  readonly fallbackHome?: string;
   readonly lockRetryAttempts?: number;
   readonly lockRetryDelayMs?: number;
 }
@@ -55,13 +56,6 @@ interface RawTaskFile {
   readonly raw: string;
   readonly tasks: readonly Task[];
 }
-
-const success = <T>(value: T): Result<T> => ({ ok: true, value });
-
-const failure = (error: TaskLakeError): Result<never> => ({
-  ok: false,
-  error,
-});
 
 const errnoCode = (cause: unknown): string | undefined => {
   if (typeof cause !== "object" || cause === null || !("code" in cause)) {
@@ -114,8 +108,7 @@ export const resolveStoragePaths = (
   options: StorageOptions = {},
 ): StoragePaths => {
   const home = resolve(
-    options.home ??
-      resolveTaskLakeHome(options.env ?? process.env, options.fallbackHome),
+    options.home ?? resolveTaskLakeHome(options.env ?? process.env),
   );
   const dataFile = join(home, DATA_FILE_NAME);
 
@@ -182,15 +175,6 @@ export const diagnoseTasks = async (
 const delay = async (milliseconds: number): Promise<void> =>
   await new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
-const positiveIntegerOr = (value: number | undefined, fallback: number): number =>
-  value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
-
-const nonNegativeNumberOr = (
-  value: number | undefined,
-  fallback: number,
-): number =>
-  value !== undefined && Number.isFinite(value) && value >= 0 ? value : fallback;
-
 const removeIfPresent = async (path: string): Promise<void> => {
   try {
     await unlink(path);
@@ -205,32 +189,22 @@ const acquireLock = async (
   paths: StoragePaths,
   options: StorageOptions,
 ): Promise<Result<FileHandle>> => {
-  const attempts = positiveIntegerOr(
-    options.lockRetryAttempts,
-    DEFAULT_LOCK_RETRY_ATTEMPTS,
-  );
-  const retryDelayMs = nonNegativeNumberOr(
-    options.lockRetryDelayMs,
-    DEFAULT_LOCK_RETRY_DELAY_MS,
-  );
+  const attempts =
+    options.lockRetryAttempts !== undefined &&
+    Number.isInteger(options.lockRetryAttempts) &&
+    options.lockRetryAttempts > 0
+      ? options.lockRetryAttempts
+      : DEFAULT_LOCK_RETRY_ATTEMPTS;
+  const retryDelayMs =
+    options.lockRetryDelayMs !== undefined &&
+    Number.isFinite(options.lockRetryDelayMs) &&
+    options.lockRetryDelayMs >= 0
+      ? options.lockRetryDelayMs
+      : DEFAULT_LOCK_RETRY_DELAY_MS;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const handle = await open(paths.lockFile, "wx");
-      try {
-        await handle.writeFile(
-          `${JSON.stringify({ pid: process.pid, created: new Date().toISOString() })}\n`,
-          "utf8",
-        );
-        return success(handle);
-      } catch (cause) {
-        await handle.close().catch(() => undefined);
-        await removeIfPresent(paths.lockFile).catch(() => undefined);
-        return ioFailure(
-          `ロックファイルを書き込めません: ${paths.lockFile}: ${errorMessage(cause)}`,
-          `親ディレクトリの権限を確認してください: ${paths.home}`,
-        );
-      }
+      return success(await open(paths.lockFile, "wx"));
     } catch (cause) {
       if (errnoCode(cause) !== "EEXIST") {
         return ioFailure(
@@ -310,25 +284,6 @@ const writeThenRename = async (
   }
 };
 
-const validateTransactionTasks = (
-  tasks: readonly Task[],
-  paths: StoragePaths,
-): Result<string> => {
-  try {
-    const serialized = serializeJsonl(tasks);
-    const checked = parseAndValidateJsonl(serialized);
-    return checked.ok
-      ? success(serializeJsonl(checked.value))
-      : failure(enrichValidationError(checked.error, paths));
-  } catch (cause) {
-    return failure({
-      code: "validation",
-      message: `変更後データをJSONLとして保存できません: ${errorMessage(cause)}`,
-      next_step: "変更内容の既知フィールドと未知フィールドがJSON値であることを確認してください",
-    });
-  }
-};
-
 const runTransaction = async <T extends TaskTransactionResult>(
   paths: StoragePaths,
   transform: TaskTransaction<T>,
@@ -343,10 +298,7 @@ const runTransaction = async <T extends TaskTransactionResult>(
     return transformed;
   }
 
-  const serialized = validateTransactionTasks(transformed.value.tasks, paths);
-  if (!serialized.ok) {
-    return serialized;
-  }
+  const serialized = serializeJsonl(transformed.value.tasks);
 
   const backup = await writeThenRename(
     loaded.value.raw,
@@ -359,7 +311,7 @@ const runTransaction = async <T extends TaskTransactionResult>(
   }
 
   const data = await writeThenRename(
-    serialized.value,
+    serialized,
     nextDataTempPath(paths),
     paths.dataFile,
     true,

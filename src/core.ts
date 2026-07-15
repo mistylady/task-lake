@@ -40,9 +40,6 @@ const notFoundError = (id: string): TaskLakeError => ({
   next_step: "tlk list --json でIDを確認してください",
 });
 
-const validateExistingTasks = (tasks: readonly Task[]): Result<readonly Task[]> =>
-  validateTasks(tasks);
-
 const validateMutationId = (id: string, command: string): Result<string> =>
   NUMERIC_SELECTOR.test(id)
     ? ok(id)
@@ -92,7 +89,7 @@ export const addTask = (
   tasks: readonly Task[],
   input: AddTaskInput,
 ): Result<MutationResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
 
   if (typeof input.title !== "string" || input.title.length === 0) {
@@ -171,7 +168,7 @@ export const listTasks = (
   tasks: readonly Task[],
   options: ListTaskOptions = {},
 ): Result<TaskListResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
 
   if (
@@ -221,7 +218,7 @@ const candidatesById = (tasks: readonly Task[]): readonly TaskCandidate[] =>
     .map(({ id, title }) => ({ id, title }));
 
 export const showTask = (tasks: readonly Task[], selector: string): Result<Task> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
 
   if (selector.length === 0) {
@@ -267,7 +264,7 @@ export const doneTask = (
   id: string,
   input: DoneTaskInput,
 ): Result<MutationResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
   const validId = validateMutationId(id, "done");
   if (!validId.ok) return validId;
@@ -301,7 +298,7 @@ export const reopenTask = (
   tasks: readonly Task[],
   id: string,
 ): Result<MutationResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
   const validId = validateMutationId(id, "reopen");
   if (!validId.ok) return validId;
@@ -371,7 +368,7 @@ export const editTask = (
   id: string,
   input: EditTaskInput,
 ): Result<MutationResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
   const validId = validateMutationId(id, "edit");
   if (!validId.ok) return validId;
@@ -441,7 +438,7 @@ export const removeTask = (
   tasks: readonly Task[],
   id: string,
 ): Result<MutationResult> => {
-  const validated = validateExistingTasks(tasks);
+  const validated = validateTasks(tasks);
   if (!validated.ok) return validated;
   const validId = validateMutationId(id, "rm");
   if (!validId.ok) return validId;
@@ -455,6 +452,3 @@ export const removeTask = (
     task: removed,
   });
 };
-
-/** Command-name alias for callers that prefer the CLI spelling. */
-export const rmTask = removeTask;
