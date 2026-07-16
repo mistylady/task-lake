@@ -53,13 +53,16 @@ const usageError = (
   message: string,
   programName: string,
   command?: CommandName,
+  nextStep?: string,
 ): UsageError => ({
   code: "usage",
   message,
   next_step:
-    command === undefined
-      ? `${programName} --help でコマンド一覧を確認してください`
-      : `${programName} ${command} --help で使い方を確認してください`,
+    nextStep !== undefined
+      ? nextStep
+      : command === undefined
+        ? `${programName} --help でコマンド一覧を確認してください`
+        : `${programName} ${command} --help で使い方を確認してください`,
 });
 
 const owns = (record: Readonly<Record<string, unknown>>, key: string): boolean =>
@@ -280,7 +283,12 @@ const validatePositional = (
 ): Result<string, UsageError> => {
   if (argument.valueType === "id" && !/^[0-9]+$/.test(value)) {
     return failure(
-      usageError(`${argument.name} には純数値のIDを指定してください`, programName, command),
+      usageError(
+        `${argument.name} には純数値のIDを指定してください`,
+        programName,
+        command,
+        `${programName} show "<タイトル断片>" --json か ${programName} list --json で数値IDを特定してから再実行してください`,
+      ),
     );
   }
   if (argument.valueType === "command-name" && !isCommandName(value)) {

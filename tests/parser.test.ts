@@ -124,7 +124,6 @@ describe("parseArgs", () => {
     [["wat"], "不明なコマンド"],
     [["--wat"], "不明なオプション"],
     [["add"], "必須引数"],
-    [["done", "title"], "純数値のID"],
     [["list", "--limit", "-1"], "0以上の整数"],
     [["list", "--limit", "1.5"], "0以上の整数"],
     [["show", "one", "two"], "余分な引数"],
@@ -141,6 +140,18 @@ describe("parseArgs", () => {
     expect(result.error.code).toBe("usage");
     expect(result.error.message).toContain(message);
     expect(result.error.next_step).toContain("--help");
+  });
+
+  test("returns a recovery-oriented next_step for a non-numeric id argument", () => {
+    const result = parseArgs(["done", "title"]);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("usage");
+    expect(result.error.message).toContain("純数値のID");
+    expect(result.error.next_step).toContain("show");
+    expect(result.error.next_step).toContain("list");
   });
 
   test.each([
