@@ -2,9 +2,13 @@
 
 English | [日本語](README.md)
 
-Task Lake is a CLI for managing small tasks that don't warrant a Redmine ticket, all in a single local store.
+Task Lake is a CLI for managing small tasks that don't warrant a ticket, all in a single local store.
 
-The primary operators of Task Lake are AI agents (Claude Code, Codex, etc.). You let agents handle creating, completing, and editing tasks while you just review the resulting list. That's the intended workflow, so there are no interactive prompts or confirmation dialogs. To let agents work reliably with minimal round-trips, every command supports `--json` structured output (agents should always use it), exit codes distinguish failure types, and errors include a suggested next action (`next_step`). Mutation commands like `done` and `rm` are idempotent -- retrying after a lost response won't cause damage. The one exception is `add`: retrying creates a duplicate, so when a response is lost, check with `list` before retrying. Manual use works fine too.
+The primary operators of Task Lake are AI agents (Claude Code, Codex, etc.). You let agents handle creating, completing, and editing tasks while you just review the resulting list. That's the intended workflow, so there are no interactive prompts or confirmation dialogs. Manual use works fine too.
+
+The design prioritizes letting agents work reliably with minimal round-trips. Every command supports `--json` structured output (agents should always use it), exit codes distinguish failure types, and errors always include a suggested next action (`next_step`).
+
+Mutation commands like `done` and `rm` are idempotent -- retrying after a lost response won't cause damage. The one exception is `add`: retrying creates a duplicate, so when a response is lost, check with `list` before retrying.
 
 ## Installation
 
@@ -15,7 +19,18 @@ bun install
 bun link          # registers the tlk command in ~/.bun/bin
 ```
 
-If `~/.bun/bin` is not on your PATH, add it (e.g., append `export PATH="$HOME/.bun/bin:$PATH"` to your shell rc file). Verify:
+If `~/.bun/bin` is not on your PATH, add it (e.g., append `export PATH="$HOME/.bun/bin:$PATH"` to your shell rc file). On Windows (PowerShell), add the following to your profile instead:
+
+```powershell
+$env:PATH = "$HOME\.bun\bin;$env:PATH"
+```
+
+Profile locations:
+
+- PowerShell 7: `~\Documents\PowerShell\Microsoft.PowerShell_profile.ps1`
+- PowerShell 5 (Windows PowerShell): `~\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`
+
+Verify:
 
 ```sh
 tlk --help
@@ -23,15 +38,18 @@ tlk --help
 
 There are no runtime dependencies. Without linking, you can use `bun run --silent tlk <command>` instead. Omitting `--silent` lets Bun's own log output leak into stderr, breaking the guarantee of "exactly one JSON object on stderr on error," so avoid bare `bun run tlk` when driving from an agent.
 
-Data is stored under `~/.task-lake/` by default. During normal operation it contains two files:
+Data is stored under `~/.task-lake/` by default. During normal operation it contains three files:
 
 ```text
 ~/.task-lake/
 ├── tasks.jsonl       # task data (one JSON object per line)
-└── tasks.jsonl.bak   # backup of the previous state (one generation)
+├── tasks.jsonl.bak   # backup of the previous state (one generation)
+└── next_id           # next ID to assign (allocation counter)
 ```
 
-Each mutation saves the previous state to `tasks.jsonl.bak` (one generation only). If you make a mistake, copy `.bak` back to `tasks.jsonl` to restore. A lock file `tasks.jsonl.lock` and a temporary rename target are created during writes but will not persist after normal completion.
+Each effective mutation saves the previous state to `tasks.jsonl.bak` (one generation only). Idempotent no-ops, such as retrying `done` on a completed task, update neither the backup nor the main file. If you make a mistake, copy `.bak` back to `tasks.jsonl` to restore.
+
+`next_id` is a plain-text integer allocation counter that prevents reuse of IDs after deletion. A lock file `tasks.jsonl.lock` and temporary rename targets are created during writes but will not persist after normal completion.
 
 You can override the storage directory for tests or scratch use:
 
@@ -74,7 +92,9 @@ Every command accepts `--json`. Successful mutation results always have the shap
 {"changed":true,"task":{"id":"12","title":"Reply to client A","status":"open","labels":[],"created":"2026-07-15T21:30:00+09:00"}}
 ```
 
-`list --json` returns `{"total": ..., "items": [...]}`. Items exclude `note` and include `has_note` instead. Only `show` accepts a title fragment; when multiple tasks match, it returns an error with the list of candidates. `done`, `reopen`, `edit`, and `rm` accept numeric IDs only, to prevent accidental mutations.
+`list --json` returns `{"total": ..., "items": [...]}`. Items exclude `note` and include `has_note` instead.
+
+How you identify a task differs by command. Only `show` accepts a title fragment; when multiple tasks match, it returns an error with the list of candidates. `done`, `reopen`, `edit`, and `rm` accept numeric IDs only, to prevent accidental mutations.
 
 ## Using from AI Agents
 
@@ -112,7 +132,9 @@ With `--json`, failures emit exactly one JSON envelope to stderr. Nothing other 
 
 ## Storage Safety
 
-On mutation, the process acquires a lock and re-reads the latest data. It then atomically updates `tasks.jsonl.bak` with the old data, writes a temporary file in the same directory, and `rename`s it over the main file. Invalid JSONL or duplicate IDs abort the operation without writing. The lock is never forcibly stolen.
+On mutation, the process acquires a lock and re-reads the latest data and allocation counter. The old data is moved aside to `tasks.jsonl.bak` via rename, then a temporary file in the same directory is `rename`d over the main file. If there is no effective change, backup and data writes are skipped.
+
+The allocation counter is updated the same way before the main data, preventing reuse of deleted IDs. Invalid JSONL or duplicate IDs abort the operation without writing. The lock is never forcibly stolen.
 
 This MVP guarantees protection against partial writes on process crashes. It does not guarantee `fsync`-based durability against power loss.
 

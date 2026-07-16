@@ -5,11 +5,11 @@
       "id": 1,
       "eval_name": "eval-1-add-due-label",
       "prompt": "見積書のレビューってタスク、明日締切で積んでおいて。redmine:5678の案件のやつね",
-      "expected_output": "due=2026-07-17（今日2026-07-16の翌日）・ラベルredmine:5678付きでタスクが1件登録される",
+      "expected_output": "due=2026-07-17（今日2026-07-16の翌日）・ラベルrdm:5678付きでタスクが1件登録される",
       "files": [],
       "assertions": [
         "created task has due 2026-07-17 (tomorrow computed from today 2026-07-16)",
-        "created task has label redmine:5678",
+        "created task has label rdm:5678",
         "created task title contains 見積書",
         "exactly one task exists in tasks.jsonl after the run",
         "agent used --json flag on tlk commands (transcript)"
