@@ -33,7 +33,7 @@ export interface TaskLakeError {
   readonly code: ErrorCode;
   readonly message: string;
   readonly candidates?: readonly TaskCandidate[];
-  readonly next_step?: string;
+  readonly next_step: string;
   readonly line?: number;
   readonly field?: string;
   readonly issues?: readonly ValidationIssue[];
@@ -67,6 +67,7 @@ export interface MutationResult {
   readonly tasks: readonly Task[];
   readonly changed: boolean;
   readonly task: Task | null;
+  readonly assignedId?: bigint;
 }
 
 export interface TaskListItem {

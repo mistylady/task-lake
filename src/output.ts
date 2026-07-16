@@ -95,6 +95,6 @@ export const writeError = (
               issue.field === undefined ? "" : ` (${String(issue.field)})`
             }: ${String(issue.message)}`,
         );
-  const next = error.next_step === undefined ? [] : [`next: ${error.next_step}`];
+  const next = [`next: ${error.next_step}`];
   writeText(write, [`${error.code}: ${error.message}${location}`, ...issues, ...candidates, ...next].join("\n"));
 };

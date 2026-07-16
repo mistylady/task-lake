@@ -164,7 +164,7 @@ export const COMMAND_SPECS = [
     ],
     constraints: [],
     rules: [
-      "IDはdoneを含む全タスクの最大ID + 1",
+      "IDはmax(永続カウンタ, doneを含む全タスクの最大ID+1)。削除済みIDは再利用しない",
       "dueは暦上実在するYYYY-MM-DDのみ",
       "optional値を指定しない場合、そのキーは保存しない",
     ],

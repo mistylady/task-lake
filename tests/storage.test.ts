@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { addTask } from "../src/core";
 import {
   diagnoseTasks,
   loadTasks,
@@ -73,6 +74,7 @@ describe("storage paths", () => {
       backupFile: "/tmp/lake/tasks.jsonl.bak",
       backupTempFile: "/tmp/lake/tasks.jsonl.bak.tmp",
       lockFile: "/tmp/lake/tasks.jsonl.lock",
+      counterFile: "/tmp/lake/next_id",
     });
   });
 });
@@ -203,6 +205,94 @@ describe("write transaction", () => {
     expect(await readFile(paths.dataFile, "utf8")).toBe(jsonl(task()));
   });
 
+  test("an unchanged transaction in a new home creates no data or backup", async () => {
+    const root = await makeTemporaryDirectory();
+    const home = join(root, "new-no-op-lake");
+    const paths = resolveStoragePaths({ home });
+
+    const result = await withWriteTransaction(
+      (tasks) => ({ ok: true, value: { tasks, changed: false } }),
+      { home },
+    );
+
+    expect(result).toEqual({ ok: true, value: { tasks: [], changed: false } });
+    await expect(access(paths.dataFile)).rejects.toThrow();
+    await expect(access(paths.backupFile)).rejects.toThrow();
+    await expect(access(paths.lockFile)).rejects.toThrow();
+  });
+
+  test("an unchanged transaction preserves data and backup and releases the lock", async () => {
+    const home = await makeTemporaryDirectory();
+    const paths = resolveStoragePaths({ home });
+    await writeFile(paths.dataFile, jsonl(task()), "utf8");
+
+    const changed = await withWriteTransaction(
+      (tasks) => ({
+        ok: true,
+        value: {
+          tasks: tasks.map((current) => ({ ...current, title: "after" })),
+          changed: true,
+        },
+      }),
+      { home },
+    );
+    expect(changed.ok).toBe(true);
+    const backupBeforeNoOp = await readFile(paths.backupFile, "utf8");
+    const dataBeforeNoOp = await readFile(paths.dataFile, "utf8");
+
+    const unchanged = await withWriteTransaction(
+      (tasks) => ({ ok: true, value: { tasks, changed: false } }),
+      { home },
+    );
+
+    expect(await readFile(paths.backupFile, "utf8")).toBe(backupBeforeNoOp);
+    expect(await readFile(paths.dataFile, "utf8")).toBe(dataBeforeNoOp);
+    expect(unchanged.ok).toBe(true);
+    if (unchanged.ok) expect(unchanged.value.changed).toBe(false);
+    await expect(access(paths.lockFile)).rejects.toThrow();
+  });
+
+  test("a missing counter self-repairs from the maximum existing ID", async () => {
+    const home = await makeTemporaryDirectory();
+    const paths = resolveStoragePaths({ home });
+    await writeFile(paths.dataFile, jsonl(task({ id: "3" })), "utf8");
+
+    const result = await withWriteTransaction(
+      (tasks, nextId) =>
+        addTask(tasks, {
+          title: "new",
+          created: "2026-07-16T09:00:00+09:00",
+          nextId,
+        }),
+      { home },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.task?.id).toBe("4");
+    expect(await readFile(paths.counterFile, "utf8")).toBe("5\n");
+  });
+
+  test("an advanced counter leaves a gap instead of reusing a lower ID", async () => {
+    const home = await makeTemporaryDirectory();
+    const paths = resolveStoragePaths({ home });
+    await writeFile(paths.dataFile, jsonl(task({ id: "3" })), "utf8");
+    await writeFile(paths.counterFile, "5\n", "utf8");
+
+    const result = await withWriteTransaction(
+      (tasks, nextId) =>
+        addTask(tasks, {
+          title: "new",
+          created: "2026-07-16T09:00:00+09:00",
+          nextId,
+        }),
+      { home },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.task?.id).toBe("5");
+    expect(await readFile(paths.counterFile, "utf8")).toBe("6\n");
+  });
+
   test("does not steal an existing lock and returns an actionable io error", async () => {
     const home = await makeTemporaryDirectory();
     const paths = resolveStoragePaths({ home });
@@ -288,6 +378,7 @@ describe("write transaction", () => {
           code: "validation",
           message: "rejected by core",
           line: 1,
+          next_step: "テスト用のnext_step",
         },
       }),
       { home },

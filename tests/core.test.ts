@@ -42,6 +42,7 @@ describe("addTask", () => {
         due: "2026-07-20",
         labels: ["a", "a", "b"],
         created: CREATED,
+        nextId: 0n,
       }),
     );
 
@@ -60,14 +61,21 @@ describe("addTask", () => {
   });
 
   test("omits optional keys and rejects an empty title or impossible due date", () => {
-    const added = valueOf(addTask([], { title: "minimal", created: CREATED }));
+    const added = valueOf(
+      addTask([], { title: "minimal", created: CREATED, nextId: 0n }),
+    );
     expect(added.task).not.toHaveProperty("note");
     expect(added.task).not.toHaveProperty("due");
     expect(added.task).not.toHaveProperty("closed");
 
-    const empty = addTask([], { title: "", created: CREATED });
+    const empty = addTask([], { title: "", created: CREATED, nextId: 0n });
     expect(empty.ok ? undefined : empty.error.code).toBe("validation");
-    const badDue = addTask([], { title: "x", due: "2026-02-31", created: CREATED });
+    const badDue = addTask([], {
+      title: "x",
+      due: "2026-02-31",
+      created: CREATED,
+      nextId: 0n,
+    });
     expect(badDue.ok ? undefined : badDue.error.code).toBe("validation");
   });
 });

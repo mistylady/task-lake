@@ -34,6 +34,7 @@ export interface StoragePaths {
   readonly backupFile: string;
   readonly backupTempFile: string;
   readonly lockFile: string;
+  readonly counterFile: string;
 }
 
 export interface StorageOptions {
@@ -46,10 +47,13 @@ export interface StorageOptions {
 
 export type TaskTransactionResult = Readonly<{
   tasks: readonly Task[];
+  changed: boolean;
+  assignedId?: bigint;
 }>;
 
 export type TaskTransaction<T extends TaskTransactionResult> = (
   tasks: readonly Task[],
+  nextId: bigint,
 ) => Result<T>;
 
 interface RawTaskFile {
@@ -73,24 +77,13 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'
 
 const ioFailure = (
   message: string,
-  nextStep?: string,
+  nextStep: string,
 ): Result<never> =>
   failure({
     code: "io",
     message,
-    ...(nextStep === undefined ? {} : { next_step: nextStep }),
+    next_step: nextStep,
   });
-
-const validationNextStep = (paths: StoragePaths): string =>
-  `tlk validate で内容を確認し、必要なら ${paths.backupFile} から復旧してください`;
-
-const enrichValidationError = (
-  error: TaskLakeError,
-  paths: StoragePaths,
-): TaskLakeError =>
-  error.code === "validation" && error.next_step === undefined
-    ? { ...error, next_step: validationNextStep(paths) }
-    : error;
 
 export const resolveTaskLakeHome = (
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -118,6 +111,7 @@ export const resolveStoragePaths = (
     backupFile: `${dataFile}.bak`,
     backupTempFile: `${dataFile}.bak.tmp`,
     lockFile: `${dataFile}.lock`,
+    counterFile: join(home, "next_id"),
   };
 };
 
@@ -146,7 +140,7 @@ const loadRawTaskFile = async (
 
   const parsed = parseAndValidateJsonl(raw.value);
   if (!parsed.ok) {
-    return failure(enrichValidationError(parsed.error, paths));
+    return failure(parsed.error);
   }
 
   return success({ raw: raw.value, tasks: parsed.value });
@@ -249,6 +243,7 @@ const releaseLock = async (
     ? success(undefined)
     : ioFailure(
         `ロックファイルを閉じられません: ${paths.lockFile}: ${errorMessage(closeError)}`,
+        "操作結果が確定できません。tlk list --all --json または tlk validate --json で現在の状態を確認してください",
       );
 };
 
@@ -284,6 +279,42 @@ const writeThenRename = async (
   }
 };
 
+const readCounter = async (paths: StoragePaths): Promise<Result<bigint>> => {
+  let raw: string;
+  try {
+    raw = await readFile(paths.counterFile, "utf8");
+  } catch (cause) {
+    if (errnoCode(cause) === "ENOENT") {
+      return success(0n);
+    }
+
+    return ioFailure(
+      `採番カウンタを読み込めません: ${paths.counterFile}: ${errorMessage(cause)}`,
+      `ファイルと親ディレクトリの権限を確認してください: ${paths.counterFile}`,
+    );
+  }
+
+  const value = raw.trim();
+  if (!/^\d+$/.test(value)) {
+    return failure({
+      code: "validation",
+      message: `採番カウンタが不正です: ${paths.counterFile}`,
+      next_step: `${paths.counterFile} の内容を数値1行に修正するか、ファイルを削除してください（削除すると次回の変更時に再作成されます）`,
+    });
+  }
+
+  return success(BigInt(value));
+};
+
+const nextIdAfterLoadedTasks = (tasks: readonly Task[]): bigint =>
+  tasks.reduce(
+    (highWater, task) => {
+      const nextId = BigInt(task.id) + 1n;
+      return nextId > highWater ? nextId : highWater;
+    },
+    0n,
+  );
+
 const runTransaction = async <T extends TaskTransactionResult>(
   paths: StoragePaths,
   transform: TaskTransaction<T>,
@@ -293,9 +324,40 @@ const runTransaction = async <T extends TaskTransactionResult>(
     return loaded;
   }
 
-  const transformed = transform(loaded.value.tasks);
+  const counter = await readCounter(paths);
+  if (!counter.ok) {
+    return counter;
+  }
+
+  const transformed = transform(loaded.value.tasks, counter.value);
   if (!transformed.ok) {
     return transformed;
+  }
+
+  if (transformed.value.changed === false) {
+    return transformed;
+  }
+
+  const loadedHighWater = nextIdAfterLoadedTasks(loaded.value.tasks);
+  const assignedHighWater =
+    transformed.value.assignedId === undefined
+      ? 0n
+      : transformed.value.assignedId + 1n;
+  const highWater = [counter.value, loadedHighWater, assignedHighWater].reduce(
+    (maximum, candidate) => candidate > maximum ? candidate : maximum,
+    0n,
+  );
+
+  if (highWater > counter.value) {
+    const counterWrite = await writeThenRename(
+      `${highWater}\n`,
+      `${paths.counterFile}.tmp`,
+      paths.counterFile,
+      false,
+    );
+    if (!counterWrite.ok) {
+      return counterWrite;
+    }
   }
 
   const serialized = serializeJsonl(transformed.value.tasks);
@@ -320,8 +382,8 @@ const runTransaction = async <T extends TaskTransactionResult>(
 };
 
 /**
- * The sole write path: mkdir -> exclusive lock -> reread -> transform -> backup
- * rename -> same-directory data rename -> unconditional lock release.
+ * The sole write path: mkdir -> exclusive lock -> reread -> transform -> skip
+ * backup+data if unchanged -> unconditional lock release.
  */
 export const withWriteTransaction = async <T extends TaskTransactionResult>(
   transform: TaskTransaction<T>,

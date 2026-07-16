@@ -204,13 +204,14 @@ const mutationResult = async (
     case "add": {
       const due = getStringOption(invocation, "due");
       return await withWriteTransaction(
-        (tasks) =>
+        (tasks, nextId) =>
           addTask(tasks, {
             title: getArgument(invocation, "title") ?? "",
             ...(note.value === undefined ? {} : { note: note.value }),
             ...(due === undefined ? {} : { due }),
             labels: getRepeatedOption(invocation, "label"),
             created: timestamp,
+            nextId,
           }),
         storage,
       );

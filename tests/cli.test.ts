@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,6 +26,7 @@ describe("CLI integration", () => {
     args: readonly string[],
     stdin = "",
     storageOverrides: NonNullable<CliIo["storage"]> = {},
+    ioOverrides: Partial<CliIo> = {},
   ): Promise<InvocationResult> => {
     let stdout = "";
     let stderr = "";
@@ -45,6 +46,7 @@ describe("CLI integration", () => {
         lockRetryDelayMs: 0,
         ...storageOverrides,
       },
+      ...ioOverrides,
     });
     return { exitCode, stdout, stderr };
   };
@@ -151,6 +153,109 @@ describe("CLI integration", () => {
     });
   });
 
+  test("does not reuse an ID after removing the current maximum", async () => {
+    const first = await invoke(["add", "first", "--json"]);
+    const firstId = JSON.parse(first.stdout).task.id;
+    expect((await invoke(["rm", firstId, "--json"])).exitCode).toBe(0);
+
+    const second = await invoke(["add", "second", "--json"]);
+    const secondId = JSON.parse(second.stdout).task.id;
+
+    expect(secondId).toBe("2");
+    expect(await readFile(join(home, "next_id"), "utf8")).toBe("3\n");
+  });
+
+  test("migrates existing data on rm before add without reusing the removed maximum ID", async () => {
+    const seeded = [
+      {
+        id: "1",
+        title: "first",
+        status: "open",
+        labels: [],
+        created: "2026-07-15T12:00:00+09:00",
+      },
+      {
+        id: "2",
+        title: "second",
+        status: "open",
+        labels: [],
+        created: "2026-07-15T12:00:00+09:00",
+      },
+    ];
+    await writeFile(
+      join(home, "tasks.jsonl"),
+      `${seeded.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      "utf8",
+    );
+
+    const removed = await invoke(["rm", "2", "--json"]);
+    expect(removed.exitCode).toBe(0);
+    expect(JSON.parse(removed.stdout)).toMatchObject({ changed: true, task: { id: "2" } });
+
+    const added = await invoke(["add", "third", "--json"]);
+    expect(added.exitCode).toBe(0);
+    expect(JSON.parse(added.stdout)).toMatchObject({ task: { id: "3" } });
+    expect(await readFile(join(home, "next_id"), "utf8")).toBe("4\n");
+  });
+
+  test("rejects a corrupt counter without changing data or the counter", async () => {
+    const dataFile = join(home, "tasks.jsonl");
+    const counterFile = join(home, "next_id");
+    const originalData = `${JSON.stringify({
+      id: "1",
+      title: "before",
+      status: "open",
+      labels: [],
+      created: "2026-07-15T12:00:00+09:00",
+    })}\n`;
+    await writeFile(dataFile, originalData, "utf8");
+    await writeFile(counterFile, "broken", "utf8");
+
+    const result = await invoke(["done", "1", "--json"]);
+
+    expect(result.exitCode).toBe(5);
+    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      error: {
+        code: "validation",
+        message: expect.stringContaining("採番カウンタが不正です"),
+        next_step: expect.stringContaining("数値1行"),
+      },
+    });
+    expect(await readFile(dataFile, "utf8")).toBe(originalData);
+    expect(await readFile(counterFile, "utf8")).toBe("broken");
+  });
+
+  test("describe add reports the persistent high-water ID rule", async () => {
+    const result = await invoke(["describe", "add", "--json"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).constraints).toContain(
+      "IDはmax(永続カウンタ, doneを含む全タスクの最大ID+1)。削除済みIDは再利用しない",
+    );
+  });
+
+  test("representative not_found and internal errors have non-empty next_step", async () => {
+    const missing = await invoke(["done", "999", "--json"]);
+    expect(missing.exitCode).toBe(3);
+    expect(JSON.parse(missing.stderr).error.next_step).toMatch(/\S/);
+
+    const internal = await invoke(
+      ["add", "fails", "--json"],
+      "",
+      {},
+      {
+        now: () => {
+          throw new Error("clock failed");
+        },
+      },
+    );
+    expect(internal.exitCode).toBe(1);
+    const internalError = JSON.parse(internal.stderr).error;
+    expect(internalError.code).toBe("internal");
+    expect(internalError.next_step).toMatch(/\S/);
+  });
+
   test("validate reports every corrupt row with exit 5 without rewriting data", async () => {
     const raw = [
       '{"id":"1","title":"bad","status":"done","labels":[],"created":"2026-07-15T12:00:00+09:00"}',
@@ -164,6 +269,7 @@ describe("CLI integration", () => {
     expect(result.stdout).toBe("");
     const error = JSON.parse(result.stderr).error;
     expect(error.code).toBe("validation");
+    expect(error.next_step).toMatch(/\S/);
     expect(error.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ line: 1, field: "closed" }),

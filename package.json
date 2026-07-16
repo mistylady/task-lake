@@ -1,6 +1,6 @@
 {
   "name": "task-lake",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A deterministic local task CLI designed for humans and AI agents",
   "type": "module",
   "private": true,

@@ -83,6 +83,7 @@ export interface AddTaskInput {
   readonly labels?: readonly string[];
   /** Offset-bearing ISO timestamp supplied by the I/O shell. */
   readonly created: string;
+  readonly nextId: bigint;
 }
 
 export const addTask = (
@@ -125,14 +126,14 @@ export const addTask = (
   const created = validateTimestamp(input.created);
   if (!created.ok) return created;
 
-  const nextId =
-    validated.value.reduce(
-      (maximum, task) => {
-        const current = BigInt(task.id);
-        return current > maximum ? current : maximum;
-      },
-      0n,
-    ) + 1n;
+  const maxExisting = validated.value.reduce(
+    (maximum, task) => {
+      const current = BigInt(task.id);
+      return current > maximum ? current : maximum;
+    },
+    0n,
+  );
+  const nextId = input.nextId > maxExisting ? input.nextId : maxExisting + 1n;
 
   const task: Task = {
     id: nextId.toString(),
@@ -144,7 +145,7 @@ export const addTask = (
     created: input.created,
   };
   const nextTasks = [...validated.value, task];
-  return ok({ tasks: nextTasks, changed: true, task });
+  return ok({ tasks: nextTasks, changed: true, task, assignedId: nextId });
 };
 
 export interface ListTaskOptions {
