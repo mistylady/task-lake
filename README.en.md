@@ -38,6 +38,8 @@ tlk --help
 
 There are no runtime dependencies. Without linking, you can use `bun run --silent tlk <command>` instead. Omitting `--silent` lets Bun's own log output leak into stderr, breaking the guarantee of "exactly one JSON object on stderr on error," so avoid bare `bun run tlk` when driving from an agent.
 
+To update, just run `git pull` in this cloned repository. No re-linking or build step is needed, and stored data migrates automatically on the next mutation. If you copied the skill (`skills/use-task-lake/`) to your agent's skill directory, copy it again as well.
+
 Data is stored under `~/.task-lake/` by default. During normal operation it contains three files:
 
 ```text
