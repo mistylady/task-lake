@@ -111,6 +111,17 @@ tlk validate --json
 
 ラベルの慣習: チケット紐付けは `rdm:<番号>`（Redmine）/ `gh:<番号>`（GitHub）の形式で統一します（ラベル自体は自由文字列です）。
 
+## 応用: AIエージェントの作業台帳として使う
+
+tlk は「人間がAIに積む受信箱」だけでなく、AIエージェント自身が長時間作業のチェックポイントに使うこともできます。コンテキストの圧縮や再起動をまたいでも、`tlk list` から作業状態を復元できます。
+
+人間のタスクと混ざらないよう、どちらかで仕分けます。
+
+- ラベルで区別する: `tlk add "実装を調査する" -l ai:myrepo` のように付け、再開時は `tlk list -l ai:myrepo --json` で絞り込む
+- 保存先ごと分ける: `env TASK_LAKE_HOME="$(git rev-parse --show-toplevel)/.task-lake-agent" tlk ...`（`.task-lake-agent/` は `.gitignore` に追加）
+
+一例なので、ラベル名や分離方法はプロジェクトに合わせて調整してください。
+
 ## 終了コードとエラー
 
 | exit | 意味 | JSONエラーcode |

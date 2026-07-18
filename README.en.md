@@ -113,6 +113,17 @@ When an agent needs to look up flags or constraints, it can run `tlk describe <c
 
 Label conventions: use `rdm:<number>` (Redmine) and `gh:<number>` (GitHub) for ticket links. Labels themselves are free-form strings.
 
+## Advanced: using tlk as an AI agent's work ledger
+
+Beyond being an inbox where humans hand tasks to an AI, tlk can serve as a checkpoint store for an agent's own long-running work. Even across context compaction or restarts, the agent can restore its progress from `tlk list`.
+
+To keep these apart from human tasks, separate them one of two ways:
+
+- By label: add tasks like `tlk add "investigate the implementation" -l ai:myrepo`, and on resume filter with `tlk list -l ai:myrepo --json`.
+- By storage location: `env TASK_LAKE_HOME="$(git rev-parse --show-toplevel)/.task-lake-agent" tlk ...` (add `.task-lake-agent/` to `.gitignore`).
+
+This is just one example—adjust the label scheme or separation method to fit your project.
+
 ## Exit Codes and Errors
 
 | exit | meaning | JSON error `code` |
